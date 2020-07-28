@@ -93,7 +93,14 @@ namespace OpenMetaverse
         /// <summary>Request the ban list</summary>
         Ban = 1 << 1,
         /// <summary>Request both White and Black lists</summary>
-        Both = Access | Ban
+        Both = Access | Ban,
+		/// <summary>Request the allowed experiences list</summary>
+        Allowed = 1 << 3,
+        /// <summary>Request the blocked experiences list</summary>
+        Blocked = 1 << 4,
+
+        /// <summary>Request all access lists</summary>
+        All = Access | Ban | Allowed | Blocked
     }
 
     /// <summary>
