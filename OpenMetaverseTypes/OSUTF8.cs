@@ -117,6 +117,11 @@ namespace OpenMetaverse
                     i = m_data.Length - 1;
                 return m_data[i];
             }
+            set
+            {
+                if (i > 0 && i < m_len)
+                    m_data[i] = value;
+            }
         }
 
         public int Length
@@ -163,6 +168,9 @@ namespace OpenMetaverse
             if (obj is string)
                 return Equals((string)obj);
 
+            if (obj is byte[])
+                return Equals((byte[])obj);
+
             return false;
         }
 
@@ -192,6 +200,32 @@ namespace OpenMetaverse
                 }
             }
 
+            return true;
+        }
+
+        public unsafe bool Equals(byte[] o)
+        {
+            if (o == null || m_len != o.Length)
+                return false;
+
+            if (m_len < 8)
+            {
+                for (int i = 0; i < m_len; ++i)
+                {
+                    if (m_data[i] != o[i])
+                        return false;
+                }
+                return true;
+            }
+
+            fixed (byte* a = m_data, b = o)
+            {
+                for (int i = 0; i < m_len; ++i)
+                {
+                    if (a[i] != b[i])
+                        return false;
+                }
+            }
             return true;
         }
 
@@ -406,7 +440,7 @@ namespace OpenMetaverse
             int srcindx = 0;
 
             CheckCapacity(s.Length);
-            while (!Utils.osUTF8TryGetbytesNoTerm(s, ref srcindx, m_data, ref indx))
+            while (!Utils.osUTF8TryGetbytes(s, ref srcindx, m_data, ref indx))
             {
                 m_len = indx;
                 CheckCapacity(s.Length - srcindx + 256);
@@ -742,7 +776,7 @@ namespace OpenMetaverse
                     for (int j = i; k < otherlen; ++k, ++j)
                     {
                         if (a[j] != b[k])
-                            return -1;
+                           break;
                     }
                     if (k == otherlen)
                         return i;
@@ -751,6 +785,30 @@ namespace OpenMetaverse
             }
         }
 
+        public unsafe int IndexOf(byte[] other)
+        {
+            if (other == null)
+                return -1;
+            int otherlen = other.Length;
+            if (otherlen > m_len || otherlen == 0)
+                return -1;
+
+            fixed (byte* a = m_data, b = other)
+            {
+                for (int i = 0; i < m_len - otherlen; ++i)
+                {
+                    int k = 0;
+                    for (int j = i; k < otherlen; ++k, ++j)
+                    {
+                        if (a[j] != b[k])
+                            break;
+                    }
+                    if (k == otherlen)
+                        return i;
+                }
+                return -1;
+            }
+        }
         public int IndexOf(string s)
         {
             if (string.IsNullOrEmpty(s))
@@ -948,6 +1006,54 @@ namespace OpenMetaverse
                         return false;
                 }
             return true;
+        }
+
+        public void RemoveBytesSelf(int start, int len)
+        {
+            if (start < 0)
+                throw new ArgumentOutOfRangeException("startIndex", "ArgumentOutOfRange_StartIndex");
+
+            if(start >= m_len)
+                return;
+
+            if (len < 0)
+            {
+                m_len = start;
+                return;
+            }
+
+            int end = start + len;
+            if (end >= m_len)
+            {
+                m_len = start;
+                return;
+            }
+            Array.Copy(m_data, end, m_data, start, m_len - end);
+            m_len -=  len;
+        }
+
+        public osUTF8 RemoveBytes(int start, int len)
+        {
+            if (start < 0)
+                throw new ArgumentOutOfRangeException("startIndex", "ArgumentOutOfRange_StartIndex");
+
+            if (start >= m_len)
+                return Clone();
+
+            osUTF8 o = new osUTF8(m_len);
+            Array.Copy(m_data, 0, o.m_data, 0, start);
+            o.m_len = start;
+
+            if (len < 0)
+                return o;
+
+            int end = start + len;
+            if (end >= m_len)
+                return o;
+
+            Array.Copy(m_data, end, o.m_data, start, m_len - end);
+            o.m_len = m_len - len;
+            return o;
         }
     }
 }

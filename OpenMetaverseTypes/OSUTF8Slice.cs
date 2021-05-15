@@ -134,6 +134,15 @@ namespace OpenMetaverse
                     i = m_data.Length - 1;
                 return m_data[i];
             }
+            set
+            {
+                if (i > 0)
+                {
+                    i += m_offset;
+                    if(i < m_len)
+                        m_data[i] = value;
+                }
+            }
         }
 
         public int Length
@@ -144,6 +153,11 @@ namespace OpenMetaverse
         public int Capacity
         {
             get { return m_data.Length; }
+        }
+
+        public int StartOffset
+        {
+            get { return m_offset; }
         }
 
         public void MoveStart(int of)
@@ -237,6 +251,9 @@ namespace OpenMetaverse
             if (obj is string)
                 return Equals((string)obj);
 
+            if (obj is byte[])
+                return Equals((byte[])obj);
+
             return false;
         }
 
@@ -287,6 +304,32 @@ namespace OpenMetaverse
             }
 
             fixed (byte* a = &m_data[m_offset], b = otherdata)
+            {
+                for (int i = 0; i < m_len; ++i)
+                {
+                    if (a[i] != b[i])
+                        return false;
+                }
+            }
+            return true;
+        }
+
+        public unsafe bool Equals(byte[] o)
+        {
+            if (o == null || m_len != o.Length)
+                return false;
+
+            if (m_len < 8)
+            {
+                for (int i = m_offset, j = 0; i < m_offset + m_len; ++i, ++j)
+                {
+                    if (m_data[i] != o[j])
+                        return false;
+                }
+                return true;
+            }
+
+            fixed (byte* a = &m_data[m_offset], b = o)
             {
                 for (int i = 0; i < m_len; ++i)
                 {
@@ -491,7 +534,7 @@ namespace OpenMetaverse
             int srcindx = 0;
 
             CheckCapacity(ref indx, s.Length);
-            while (!Utils.osUTF8TryGetbytesNoTerm(s, ref srcindx, m_data, ref indx))
+            while (!Utils.osUTF8TryGetbytes(s, ref srcindx, m_data, ref indx))
             {
                 m_len = indx - m_offset;
                 CheckCapacity(ref indx, s.Length - srcindx + 256);
@@ -706,57 +749,37 @@ namespace OpenMetaverse
         // inplace remove white spaces at start
         public void SelfTrimStart()
         {
-            if (m_len == 0)
-                return;
-            int last = m_offset + m_len - 1;
-            while (m_data[m_offset] == 0x20)
+            while (m_len > 0 && m_data[m_offset] == 0x20)
             {
                 ++m_offset;
                 --m_len;
-                if (m_offset == last)
-                    break;
             }
         }
 
         public void SelfTrimStart(byte b)
         {
-            if (m_len == 0)
-                return;
-            int last = m_offset + m_len - 1;
-            while (m_data[m_offset] == b)
+            while (m_len > 0 && m_data[m_offset] == b)
             {
                 ++m_offset;
                 --m_len;
-                if (m_offset == last)
-                    break;
             }
         }
 
         public void SelfTrimStart(byte[] b)
         {
-            if (m_len == 0)
-                return;
-            int last = m_offset + m_len - 1;
-            while (checkAny(m_data[m_offset], b))
+            while (m_len > 0 && checkAny(m_data[m_offset], b))
             {
                 ++m_offset;
                 --m_len;
-                if (m_offset == last)
-                    break;
             }
         }
 
         public void SelfTrimStart(char[] b)
         {
-            if (m_len == 0)
-                return;
-            int last = m_offset + m_len - 1;
-            while (checkAny(m_data[m_offset], b))
+            while (m_len > 0 && checkAny(m_data[m_offset], b))
             {
                 ++m_offset;
                 --m_len;
-                if (m_offset == last)
-                    break;
             }
         }
 
@@ -765,12 +788,10 @@ namespace OpenMetaverse
             if (m_len == 0)
                 return;
             int last = m_offset + m_len - 1;
-            while (m_data[last] == 0x20)
+            while (m_len > 0 && m_data[last] == 0x20)
             {
                 --last;
                 --m_len;
-                if (last == m_offset)
-                    break;
             }
         }
 
@@ -779,12 +800,10 @@ namespace OpenMetaverse
             if (m_len == 0)
                 return;
             int last = m_offset + m_len - 1;
-            while (m_data[last] == b)
+            while (m_len > 0 && m_data[last] == b)
             {
                 --last;
                 --m_len;
-                if (last == m_offset)
-                    break;
             }
         }
 
@@ -793,12 +812,10 @@ namespace OpenMetaverse
             if (m_len == 0)
                 return;
             int last = m_offset + m_len - 1;
-            while (checkAny(m_data[last], b))
+            while (m_len > 0 && checkAny(m_data[last], b))
             {
                 --last;
                 --m_len;
-                if (last == m_offset)
-                    break;
             }
         }
 
@@ -807,12 +824,10 @@ namespace OpenMetaverse
             if (m_len == 0)
                 return;
             int last = m_offset + m_len - 1;
-            while (checkAny(m_data[last], b))
+            while (m_len > 0 && checkAny(m_data[last], b))
             {
                 --last;
                 --m_len;
-                if (last == m_offset)
-                    break;
             }
         }
 
@@ -1108,7 +1123,7 @@ namespace OpenMetaverse
                     for (int j = i; k < otherlen; ++k, ++j)
                     {
                         if (a[j] != b[k])
-                            return -1;
+                            break;
                     }
                     if (k == otherlen)
                         return i;
@@ -1132,7 +1147,32 @@ namespace OpenMetaverse
                     for (int j = i; k < otherlen; ++k, ++j)
                     {
                         if (a[j] != b[k])
-                            return -1;
+                            break;
+                    }
+                    if (k == otherlen)
+                        return i;
+                }
+                return -1;
+            }
+        }
+
+        public unsafe int IndexOf(byte[] other)
+        {
+            if(other == null)
+                return -1;
+            int otherlen = other.Length;
+            if (otherlen > m_len || otherlen == 0)
+                return -1;
+
+            fixed (byte* a = &m_data[m_offset], b = other)
+            {
+                for (int i = 0; i < m_len - otherlen; ++i)
+                {
+                    int k = 0;
+                    for (int j = i; k < otherlen; ++k, ++j)
+                    {
+                        if (a[j] != b[k])
+                            break;
                     }
                     if (k == otherlen)
                         return i;
@@ -1454,6 +1494,57 @@ namespace OpenMetaverse
                 m_len = 0;
 
             return true;
+        }
+
+        public void RemoveBytesSelf(int start, int len)
+        {
+            if (start < 0)
+                throw new ArgumentOutOfRangeException("startIndex", "ArgumentOutOfRange_StartIndex");
+
+            if (start >= m_len)
+                return;
+
+            if (len < 0)
+            {
+                m_len = start;
+                return;
+            }
+
+            int end = start + len;
+            if (end >= m_len)
+            {
+                m_len = start;
+                return;
+            }
+            if(start == 0)
+                m_offset += end;
+            else
+                Array.Copy(m_data, end + m_offset, m_data, start + m_offset, m_len - end);
+            m_len -= len;
+        }
+
+        public osUTF8Slice RemoveBytes(int start, int len)
+        {
+            if (start < 0)
+                throw new ArgumentOutOfRangeException("startIndex", "ArgumentOutOfRange_StartIndex");
+
+            if (start >= m_len)
+                return Clone();
+
+            osUTF8Slice o = new osUTF8Slice(m_len);
+            Array.Copy(m_data, m_offset, o.m_data, 0, start);
+            o.m_len = start;
+
+            if (len < 0)
+                return o;
+
+            int end = start + len;
+            if (end >= m_len)
+                return o;
+
+            Array.Copy(m_data, end + m_offset, o.m_data, start, m_len - end);
+            o.m_len = m_len - len;
+            return o;
         }
 
         public static bool TryParseInt(osUTF8Slice t, out int res)
